@@ -133,10 +133,14 @@ export function useAuth() {
                     headers: getHeaders(),
                 })
                 user.value = response
-            } catch (e) {
-                // Token invalid, clear
-                token.value = null
-                tokenCookie.value = null
+            } catch (error: any) {
+                console.error('Auth verification failed:', error)
+                // ONLY clear the token if the server explicitly says it is invalid (401)
+                // Do NOT clear if it is a network error (5xx) or other transient issue
+                if (error.statusCode === 401) {
+                    token.value = null
+                    tokenCookie.value = null
+                }
             }
         }
     }
