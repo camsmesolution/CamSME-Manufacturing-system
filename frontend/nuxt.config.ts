@@ -28,6 +28,7 @@ export default defineNuxtConfig({
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000/api',
       apiKey: process.env.NUXT_PUBLIC_API_KEY || '',
+      cookieDomain: process.env.NUXT_PUBLIC_COOKIE_DOMAIN || undefined,
     },
   },
 
