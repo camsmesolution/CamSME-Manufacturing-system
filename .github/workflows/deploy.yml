@@ -176,14 +176,21 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          base: ${{ github.event.before }}
           filters: |
             backend:
               - 'backend/**'
             frontend:
               - 'frontend/**'
+      - name: Debug detected changes
+        run: |
+          echo "backend changed: ${{ steps.filter.outputs.backend }}"
+          echo "frontend changed: ${{ steps.filter.outputs.frontend }}"
 
   # ============================================
   # Deploy Backend (Run on Main only, if changed)
@@ -199,6 +206,10 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+
+      - name: Debug condition
+        run: |
+          echo "Backend output from detect-changes: ${{ needs.detect-changes.outputs.backend }}"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -235,6 +246,11 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+
+      - name: Debug conditions
+        run: |
+          echo "Frontend output from detect-changes: ${{ needs.detect-changes.outputs.frontend }}"
+          echo "Deploy-backend result: ${{ needs.deploy-backend.result }}"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
