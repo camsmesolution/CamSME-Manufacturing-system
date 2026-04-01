@@ -19,23 +19,29 @@ RUN apt-get update && apt-get install -y \
     gd \
     zip \
     intl \
-    opcache
+    opcache \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy application files
+# Copy application files with proper ownership
 COPY --chown=www-data:www-data . .
 
 # Install PHP dependencies
+USER www-data
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Copy deploy script
+# Switch back to root for final setup
+USER root
+
+# Copy and setup deploy script
 COPY --chown=www-data:www-data deploy.sh /usr/local/bin/deploy.sh
 RUN chmod +x /usr/local/bin/deploy.sh
 
-# Force Nginx Config
-COPY nginx.conf /etc/nginx/nginx.conf
+# The serversideup image is already optimized for Laravel.
+# We only need to override the site config if we have specific needs.
+# For now, let's trust the default or use a focused site config.
 
 # Set Entrypoint
 ENTRYPOINT ["/usr/local/bin/deploy.sh"]
