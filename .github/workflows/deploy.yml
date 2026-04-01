@@ -3,8 +3,6 @@ name: Smart Itinerary CI/CD
 on:
   push:
     branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
 
 env:
   PHP_VERSION: '8.4'
@@ -17,7 +15,7 @@ jobs:
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop' || github.event_name == 'pull_request'
+    if: github.ref == 'refs/heads/develop'
     
     services:
       postgres:
@@ -99,7 +97,7 @@ jobs:
   frontend-checks:
     name: Frontend Checks
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop' || github.event_name == 'pull_request'
+    if: github.ref == 'refs/heads/develop'
 
     steps:
       - name: Checkout code
@@ -130,7 +128,7 @@ jobs:
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop' || github.event_name == 'pull_request'
+    if: github.ref == 'refs/heads/develop'
     
     steps:
       - name: Checkout code
@@ -172,7 +170,7 @@ jobs:
   detect-changes:
     name: Detect Changes
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main'
     outputs:
       backend: ${{ steps.changes.outputs.backend }}
       frontend: ${{ steps.changes.outputs.frontend }}

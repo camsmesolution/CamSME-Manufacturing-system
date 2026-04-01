@@ -35,14 +35,11 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction
 # Switch back to root for final setup
 USER root
 
-# Copy and setup deploy script
-COPY --chown=www-data:www-data deploy.sh /usr/local/bin/deploy.sh
-RUN chmod +x /usr/local/bin/deploy.sh
-
 # Use the image's optimized Laravel settings
 ENV NGINX_PORT=80
 ENV AUTORUN_LARAVEL_STORAGE_LINK=false
 
-# Set Entrypoint
-ENTRYPOINT ["/usr/local/bin/deploy.sh"]
+# Use the image's standard entrypoint system for custom scripts
+COPY --chown=www-data:www-data deploy.sh /etc/entrypoint.d/deploy.sh
+RUN chmod +x /etc/entrypoint.d/deploy.sh
 

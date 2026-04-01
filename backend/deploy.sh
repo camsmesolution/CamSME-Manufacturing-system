@@ -63,6 +63,5 @@ else
     find / -name "www.conf" 2>/dev/null
 fi
 
-# 4. Start the main process (PHP-FPM + Nginx)
-echo "✅ Deployment Tasks Complete. Starting Server..."
-exec /init "$@"
+# 4. Starting Server (Handled by image)
+echo "✅ Deployment Tasks Complete."
