@@ -15,9 +15,17 @@ else
 fi
 
 
-# 1. Run Migrations
-echo "📦 Running Migrations..."
-php artisan migrate --force
+# 1. Run Migrations & Seeds
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+    echo "📦 Running Migrations..."
+    php artisan migrate --force
+fi
+
+if [ "$RUN_SEED" = "true" ]; then
+    echo "🌱 Seeding Database..."
+    php artisan db:seed --force
+fi
+
 rm -rf public/storage
 php artisan storage:link
 chmod -R 775 storage bootstrap/cache
