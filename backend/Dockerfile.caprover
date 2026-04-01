@@ -39,8 +39,9 @@ USER root
 COPY --chown=www-data:www-data deploy.sh /usr/local/bin/deploy.sh
 RUN chmod +x /usr/local/bin/deploy.sh
 
-# Force Nginx Config
-COPY nginx.conf /etc/nginx/nginx.conf
+# Use the image's optimized Laravel settings
+ENV NGINX_PORT=80
+ENV AUTORUN_LARAVEL_STORAGE_LINK=false
 
 # Set Entrypoint
 ENTRYPOINT ["/usr/local/bin/deploy.sh"]
