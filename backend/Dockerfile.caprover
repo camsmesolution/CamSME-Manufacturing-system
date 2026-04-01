@@ -39,9 +39,8 @@ USER root
 COPY --chown=www-data:www-data deploy.sh /usr/local/bin/deploy.sh
 RUN chmod +x /usr/local/bin/deploy.sh
 
-# The serversideup image is already optimized for Laravel.
-# We only need to override the site config if we have specific needs.
-# For now, let's trust the default or use a focused site config.
+# Force Nginx Config
+COPY nginx.conf /etc/nginx/nginx.conf
 
 # Set Entrypoint
 ENTRYPOINT ["/usr/local/bin/deploy.sh"]
