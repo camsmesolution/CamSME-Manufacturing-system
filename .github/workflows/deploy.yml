@@ -172,42 +172,18 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     outputs:
-      backend: ${{ steps.changes.outputs.backend }}
-      frontend: ${{ steps.changes.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
         with:
-          fetch-depth: 0
-      - name: Detect changed paths
-        id: changes
-        run: |
-          # Compare current commit against its first parent
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "FALLBACK")
-          
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
-          
-          if [ "$CHANGED_FILES" = "FALLBACK" ]; then
-            echo "Could not diff, deploying everything"
-            echo "backend=true" >> $GITHUB_OUTPUT
-            echo "frontend=true" >> $GITHUB_OUTPUT
-          else
-            if echo "$CHANGED_FILES" | grep -qE '^(backend/|\.github/)'; then
-              echo "backend=true" >> $GITHUB_OUTPUT
-              echo "Backend changes detected"
-            else
-              echo "backend=false" >> $GITHUB_OUTPUT
-              echo "No backend changes detected"
-            fi
-            
-            if echo "$CHANGED_FILES" | grep -qE '^(frontend/|\.github/)'; then
-              echo "frontend=true" >> $GITHUB_OUTPUT
-              echo "Frontend changes detected"
-            else
-              echo "frontend=false" >> $GITHUB_OUTPUT
-              echo "No frontend changes detected"
-            fi
-          fi
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
 
   # ============================================
   # Deploy Backend (Run on Main only, if changed)

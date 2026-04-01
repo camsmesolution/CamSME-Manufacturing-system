@@ -28,17 +28,31 @@ export default defineNuxtConfig({
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000/api',
       apiKey: process.env.NUXT_PUBLIC_API_KEY || '',
+      cookieDomain: process.env.NUXT_PUBLIC_COOKIE_DOMAIN || undefined,
     },
   },
 
   // App config
   app: {
     head: {
-      title: 'MES - Manufacturing Execution System',
+      title: 'CamSME - Manufacturing Execution System',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'description', content: 'Manufacturing Execution System' },
+        { name: 'description', content: 'CamSME Manufacturing Execution System - Streamline your manufacturing operations with real-time tracking, production management, and quality control.' },
+        // Open Graph / Facebook
+        { property: 'og:type', content: 'website' },
+        { property: 'og:url', content: process.env.NUXT_PUBLIC_SITE_URL || 'https://your-domain.com' },
+        { property: 'og:title', content: 'CamSME - Manufacturing Execution System' },
+        { property: 'og:description', content: 'Streamline your manufacturing operations with real-time tracking, production management, and quality control.' },
+        { property: 'og:image', content: (process.env.NUXT_PUBLIC_SITE_URL || 'https://your-domain.com') + '/favicon.ico' },
+        { property: 'og:site_name', content: 'CamSME' },
+        // Twitter Card
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:url', content: process.env.NUXT_PUBLIC_SITE_URL || 'https://your-domain.com' },
+        { name: 'twitter:title', content: 'CamSME - Manufacturing Execution System' },
+        { name: 'twitter:description', content: 'Streamline your manufacturing operations with real-time tracking, production management, and quality control.' },
+        { name: 'twitter:image', content: (process.env.NUXT_PUBLIC_SITE_URL || 'https://your-domain.com') + '/favicon.ico' },
       ],
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },

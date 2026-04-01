@@ -1,17 +1,19 @@
 import type { User } from '~/types/models'
 
 export function useAuth() {
+    const config = useRuntimeConfig()
     const user = useState<User | null>('auth-user', () => null)
     // Use useCookie instead of localStorage for SSR compatibility
     const tokenCookie = useCookie<string | null>('auth-token', {
         maxAge: 60 * 60 * 24 * 7, // 7 days
         sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        domain: config.public.cookieDomain || undefined,
     })
     const token = useState<string | null>('auth-token', () => tokenCookie.value || null)
 
     const isAuthenticated = computed(() => !!token.value && !!user.value)
 
-    const config = useRuntimeConfig()
     const baseURL = (import.meta.server ? config.apiBase : config.public.apiBase) as string
     const apiKey = config.public.apiKey as string | undefined
 
@@ -131,10 +133,14 @@ export function useAuth() {
                     headers: getHeaders(),
                 })
                 user.value = response
-            } catch (e) {
-                // Token invalid, clear
-                token.value = null
-                tokenCookie.value = null
+            } catch (error: any) {
+                console.error('Auth verification failed:', error)
+                // ONLY clear the token if the server explicitly says it is invalid (401)
+                // Do NOT clear if it is a network error (5xx) or other transient issue
+                if (error.statusCode === 401) {
+                    token.value = null
+                    tokenCookie.value = null
+                }
             }
         }
     }
