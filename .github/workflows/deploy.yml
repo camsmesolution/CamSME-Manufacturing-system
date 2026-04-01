@@ -1,0 +1,281 @@
+name: Smart Itinerary CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PHP_VERSION: '8.4'
+  NODE_VERSION: '22'
+
+jobs:
+  # ============================================
+  # Backend Tests (Run on Develop only)
+  # ============================================
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || github.event_name == 'pull_request'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: testing
+          POSTGRES_PASSWORD: password
+          POSTGRES_USER: user
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, pdo_pgsql, bcmath, gd, zip, intl
+          coverage: none
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+        working-directory: backend
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+        working-directory: backend
+
+      - name: Copy .env
+        run: cp .env.example .env
+        working-directory: backend
+
+      - name: Generate app key
+        run: php artisan key:generate
+        working-directory: backend
+
+      - name: Run migrations
+        run: php artisan migrate --force
+        working-directory: backend
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: testing
+          DB_USERNAME: user
+          DB_PASSWORD: password
+
+      - name: Run tests
+        run: php artisan test
+        working-directory: backend
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: testing
+          DB_USERNAME: user
+          DB_PASSWORD: password
+
+  # ============================================
+  # Frontend Build (Run on Develop only)
+  # ============================================
+  frontend-checks:
+    name: Frontend Checks
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build
+        run: npm run build
+        working-directory: frontend
+        env:
+          NUXT_PUBLIC_API_BASE: https://api.example.com/api
+
+  # ============================================
+  # Security Audit (Run on Develop only)
+  # ============================================
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+        working-directory: backend
+
+      - name: Composer audit
+        run: composer audit
+        working-directory: backend
+        continue-on-error: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install npm dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: NPM audit
+        run: npm audit --audit-level=high
+        working-directory: frontend
+        continue-on-error: true
+
+  # ============================================
+  # Detect Changes for Deployment (Run on Main only)
+  # ============================================
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed paths
+        id: changes
+        run: |
+          # Compare current commit against its first parent
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "FALLBACK")
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          if [ "$CHANGED_FILES" = "FALLBACK" ]; then
+            echo "Could not diff, deploying everything"
+            echo "backend=true" >> $GITHUB_OUTPUT
+            echo "frontend=true" >> $GITHUB_OUTPUT
+          else
+            if echo "$CHANGED_FILES" | grep -qE '^(backend/|\.github/)'; then
+              echo "backend=true" >> $GITHUB_OUTPUT
+              echo "Backend changes detected"
+            else
+              echo "backend=false" >> $GITHUB_OUTPUT
+              echo "No backend changes detected"
+            fi
+            
+            if echo "$CHANGED_FILES" | grep -qE '^(frontend/|\.github/)'; then
+              echo "frontend=true" >> $GITHUB_OUTPUT
+              echo "Frontend changes detected"
+            else
+              echo "frontend=false" >> $GITHUB_OUTPUT
+              echo "No frontend changes detected"
+            fi
+          fi
+
+  # ============================================
+  # Deploy Backend (Run on Main only, if changed)
+  # ============================================
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    defaults:
+      run:
+        working-directory: backend
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Deploy to CapRover
+        env:
+          CAPROVER_SERVER: ${{ secrets.CAPROVER_SERVER }}
+          CAPROVER_APP: ${{ secrets.CAPROVER_BACKEND_APP }}
+          CAPROVER_TOKEN: ${{ secrets.CAPROVER_BACKEND_TOKEN }}
+        run: |
+          tar -cvf deploy.tar --exclude='node_modules' --exclude='.git' .
+          npx caprover deploy \
+            -h "$CAPROVER_SERVER" \
+            -a "$CAPROVER_APP" \
+            --appToken "$CAPROVER_TOKEN" \
+            -t deploy.tar
+
+  # ============================================
+  # Deploy Frontend (Run on Main only, if changed)
+  # ============================================
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: [detect-changes, deploy-backend]
+    if: |
+      always() && 
+      needs.detect-changes.outputs.frontend == 'true' &&
+      (needs.deploy-backend.result == 'success' || needs.deploy-backend.result == 'skipped')
+    defaults:
+      run:
+        working-directory: frontend
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Deploy to CapRover
+        env:
+          CAPROVER_SERVER: ${{ secrets.CAPROVER_SERVER }}
+          CAPROVER_APP: ${{ secrets.CAPROVER_FRONTEND_APP }}
+          CAPROVER_TOKEN: ${{ secrets.CAPROVER_FRONTEND_TOKEN }}
+        run: |
+          tar -cvf deploy.tar --exclude='node_modules' --exclude='.git' .
+          npx caprover deploy \
+            -h "$CAPROVER_SERVER" \
+            -a "$CAPROVER_APP" \
+            --appToken "$CAPROVER_TOKEN" \
+            -t deploy.tar
