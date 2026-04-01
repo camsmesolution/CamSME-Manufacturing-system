@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 
 class HealthController extends Controller
 {
+    // Test comment to trigger CI/CD deploy
     /**
      * @unauthenticated
      */
