@@ -47,6 +47,7 @@ Route::middleware(['api.key'])->group(function () {
 Route::middleware(['api.key', 'auth:sanctum', 'throttle:api'])->group(function () {
     // Auth
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::post('/auth/refresh', [AuthController::class, 'refreshToken']);
     Route::get('/auth/user', [AuthController::class, 'user']);
     Route::put('/auth/profile', [AuthController::class, 'updateProfile']);
     Route::put('/auth/password', [AuthController::class, 'changePassword']);

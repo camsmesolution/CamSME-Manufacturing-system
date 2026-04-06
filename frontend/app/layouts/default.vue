@@ -45,7 +45,15 @@
 
     <!-- Global Toast Notifications -->
     <UiToast />
-    
+
+    <!-- Idle Timeout Warning Modal -->
+    <IdleTimeoutWarning
+      :show="warningShown"
+      :formatted-time-remaining="formattedTimeRemaining"
+      @continue="stayLoggedIn"
+      @logout="performLogout"
+    />
+
     <!-- Loading Overlay -->
     <div v-if="!initialized" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
         <div class="flex flex-col items-center gap-3">
@@ -58,7 +66,10 @@
 
 <script setup lang="ts">
 // Protect route - redirect to login if not authenticated
-const { isAuthenticated, checkAuth } = useAuth()
+const { isAuthenticated, checkAuth, logout } = useAuth()
+
+// Idle timeout handling
+const { warningShown, formattedTimeRemaining, startIdleDetection, stopIdleDetection, stayLoggedIn } = useIdleTimeout()
 
 // Mobile sidebar state
 const sidebarOpen = ref(false)
@@ -75,8 +86,25 @@ watch(() => route.path, () => {
 onMounted(async () => {
     try {
         await checkAuth()
+        // Start idle detection only when authenticated
+        if (isAuthenticated.value) {
+            startIdleDetection()
+        }
     } finally {
         initialized.value = true
+    }
+})
+
+onUnmounted(() => {
+    stopIdleDetection()
+})
+
+// Watch auth state to start/stop idle detection
+watch(isAuthenticated, (authenticated) => {
+    if (authenticated && typeof window !== 'undefined') {
+        startIdleDetection()
+    } else {
+        stopIdleDetection()
     }
 })
 
@@ -85,4 +113,11 @@ watchEffect(() => {
         navigateTo('/auth/login')
     }
 })
+
+// Logout handler for warning modal
+async function performLogout() {
+    await logout()
+    stopIdleDetection()
+    navigateTo('/auth/login')
+}
 </script>
