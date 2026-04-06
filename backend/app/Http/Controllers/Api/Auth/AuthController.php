@@ -84,6 +84,22 @@ class AuthController extends Controller
         return response()->json(['message' => 'Logged out successfully']);
     }
 
+    public function refreshToken(Request $request)
+    {
+        $user = $request->user();
+
+        // Delete the current token
+        $request->user()->currentAccessToken()->delete();
+
+        // Create a new token
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'expires_in' => 7200, // 2 hours in seconds
+        ]);
+    }
+
 
     public function user(Request $request)
     {
