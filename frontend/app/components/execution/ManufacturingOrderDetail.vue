@@ -250,27 +250,64 @@
         
         <!-- Cost Analysis Tab -->
         <div v-if="activeTab === 'cost_analysis'" class="space-y-6">
+            <!-- Summary Info -->
+            <div class="bg-amber-50 border border-amber-100 p-4 rounded-lg flex items-start gap-3" v-if="mo.status !== 'done' && costDetails.length === 0">
+                <Icon name="heroicons:information-circle" class="w-5 h-5 text-amber-500 mt-0.5" />
+                <div>
+                   <h4 class="text-sm font-semibold text-amber-800">Actual costs are recorded on completion</h4>
+                   <p class="text-xs text-amber-700 mt-1">
+                     The values below show the <strong>Actual</strong> costs recorded so far. 
+                     Material costs are recorded when the order is completed, while labor/overhead are added as work orders finish.
+                   </p>
+                </div>
+            </div>
+
+            <!-- Missing Costs Warning -->
+            <div class="bg-red-50 border border-red-100 p-4 rounded-lg flex items-start gap-3" v-if="hasMissingProductCosts && activeTab === 'cost_analysis'">
+                <Icon name="heroicons:exclamation-triangle" class="w-5 h-5 text-red-500 mt-0.5" />
+                <div>
+                   <h4 class="text-sm font-semibold text-red-800">Some products have no cost defined</h4>
+                   <p class="text-xs text-red-700 mt-1">
+                     One or more components in the BOM have a cost of $0.00. This will result in inaccurate cost calculations.
+                     Please update the costs in the <nuxt-link to="/engineering/products" class="underline font-medium">Products</nuxt-link> section.
+                   </p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-gray-900">Cost Comparison</h3>
+                <div class="flex gap-4 text-xs">
+                    <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-sm bg-gray-200"></div><span>Planned</span></div>
+                    <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-sm bg-primary-500"></div><span>Actual</span></div>
+                </div>
+            </div>
+
             <!-- Summary Cards -->
             <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 <div class="p-4 bg-blue-50 rounded-lg border border-blue-100">
                     <span class="text-xs font-medium text-blue-600 uppercase">Material</span>
                     <div class="text-xl font-bold text-blue-900 mt-1">${{ costSummary.material?.toFixed(2) || '0.00' }}</div>
+                    <div class="text-[10px] text-blue-400 mt-1">Est: ${{ estimatedMaterialCost.toFixed(2) }}</div>
                 </div>
                 <div class="p-4 bg-green-50 rounded-lg border border-green-100">
                     <span class="text-xs font-medium text-green-600 uppercase">Labor</span>
                     <div class="text-xl font-bold text-green-900 mt-1">${{ costSummary.labor?.toFixed(2) || '0.00' }}</div>
+                    <div class="text-[10px] text-green-400 mt-1">Est: ${{ estimatedLaborCost.toFixed(2) }}</div>
                 </div>
                 <div class="p-4 bg-yellow-50 rounded-lg border border-yellow-100">
                     <span class="text-xs font-medium text-yellow-600 uppercase">Overhead</span>
                     <div class="text-xl font-bold text-yellow-900 mt-1">${{ costSummary.overhead?.toFixed(2) || '0.00' }}</div>
+                    <div class="text-[10px] text-yellow-400 mt-1">Est: ${{ estimatedOverheadCost.toFixed(2) }}</div>
                 </div>
                  <div class="p-4 bg-orange-50 rounded-lg border border-orange-100">
-                    <span class="text-xs font-medium text-orange-600 uppercase">Losses</span>
+                    <span class="text-xs font-medium text-orange-600 uppercase">Loss/Var</span>
                     <div class="text-xl font-bold text-orange-900 mt-1">${{ costSummary.material_variance?.toFixed(2) || '0.00' }}</div>
+                    <div class="text-[10px] text-orange-400 mt-1">Actual Variance</div>
                 </div>
                  <div class="p-4 bg-purple-50 rounded-lg border border-purple-100">
                     <span class="text-xs font-medium text-purple-600 uppercase">Total Cost</span>
                     <div class="text-xl font-bold text-purple-900 mt-1">${{ costSummary.total?.toFixed(2) || '0.00' }}</div>
+                    <div class="text-[10px] text-purple-400 mt-1">Est Total: ${{ (estimatedMaterialCost + estimatedLaborCost + estimatedOverheadCost).toFixed(2) }}</div>
                 </div>
             </div>
 
@@ -423,7 +460,36 @@ const progressPercent = computed(() => {
   return (mo.value.qty_produced / mo.value.qty_to_produce) * 100
 })
 
+// Estimation Logic
+const estimatedMaterialCost = computed(() => {
+    if (!mo.value?.bom?.lines) return 0
+    return mo.value.bom.lines.reduce((total, line) => {
+        const qty = (Number(line.quantity) * Number(mo.value!.qty_to_produce)) / Number(mo.value!.bom?.qty_produced || 1)
+        const unitCost = Number(line.product?.cost || 0)
+        return total + (qty * unitCost)
+    }, 0)
+})
 
+const hasMissingProductCosts = computed(() => {
+    if (!mo.value?.bom?.lines) return false
+    return mo.value.bom.lines.some(l => !l.product?.cost || Number(l.product.cost) === 0)
+})
+
+const estimatedLaborCost = computed(() => {
+    if (!mo.value?.work_orders) return 0
+    return mo.value.work_orders.reduce((total, wo) => {
+        const costPerHour = Number(wo.work_center?.cost_per_hour || 0)
+        return total + ((Number(wo.duration_expected) / 60) * costPerHour)
+    }, 0)
+})
+
+const estimatedOverheadCost = computed(() => {
+    if (!mo.value?.work_orders) return 0
+    return mo.value.work_orders.reduce((total, wo) => {
+        const ratePerHour = Number(wo.work_center?.overhead_per_hour || 0)
+        return total + ((Number(wo.duration_expected) / 60) * ratePerHour)
+    }, 0)
+})
 
 async function fetchMo() {
     if (!props.orderId) return

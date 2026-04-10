@@ -65,6 +65,11 @@ class ManufacturingOrderService
         // Reserve Stock for Components
         $mo->load('consumptions.product');
         foreach ($mo->consumptions as $consumption) {
+            // If already reserved, skip to avoid double reservation
+            if ($consumption->location_id) {
+                continue;
+            }
+
             // Find best stock for this component
             $stock = $this->findBestStock($consumption->product_id, $consumption->qty_planned);
 
@@ -261,11 +266,22 @@ class ManufacturingOrderService
             $qtyProduced = $data['qty_produced'] ?? $mo->qty_to_produce;
             $locationId = $data['location_id'] ?? null;
 
+            if (!$locationId) {
+                // Try to find a sensible default location (e.g. "Finished Goods" or just any internal location)
+                $locationId = \App\Models\Location::where('type', 'internal')
+                    ->where('name', 'like', '%Finished%')
+                    ->value('id') 
+                    ?? \App\Models\Location::where('type', 'internal')->value('id');
+            }
+
             $mo->update([
                 'status' => 'done',
                 'qty_produced' => $qtyProduced,
                 'actual_end' => now(),
             ]);
+
+            // Load consumptions with products to ensure cost data is available
+            $mo->load(['consumptions.product', 'bom.lines.product']);
 
             // Mark all non-done work orders as done
             $mo->workOrders()
@@ -329,11 +345,19 @@ class ManufacturingOrderService
                 }
 
                 // Calculate costs BEFORE updating consumption
+                // Find product cost robustly
                 $product = $consumption->product;
-                if (!$product)
-                    $product = \App\Models\Product::find($consumption->product_id);
+                if (!$product) {
+                    $product = \App\Models\Product::withoutGlobalScopes()->find($consumption->product_id);
+                }
 
-                $costPerUnit = $product->cost ?? 0;
+                $costPerUnit = $product ? ($product->cost ?? 0) : 0;
+                
+                if (!$product) {
+                    \Illuminate\Support\Facades\Log::warning("Product not found for consumption #{$consumption->id} during MO #{$mo->id} completion.");
+                } elseif ($costPerUnit <= 0) {
+                    \Illuminate\Support\Facades\Log::info("Product {$product->id} has 0 cost during MO #{$mo->id} completion.");
+                }
 
                 // Calculate Variance: Actual - Planned - Scrapped
                 // Scrapped items have their own CostEntry (type=scrap).
@@ -356,15 +380,18 @@ class ManufacturingOrderService
 
                 // Standard Material Cost (Based on PLANNED qty)
                 $standardCost = $consumption->qty_planned * $costPerUnit;
-                if ($standardCost > 0) {
+                
+                // Record cost entry if there is a plan or cost, to ensure visibility in reports
+                if ($consumption->qty_planned > 0) {
                     \App\Models\CostEntry::create([
+                        'organization_id' => $mo->organization_id,
                         'manufacturing_order_id' => $mo->id,
                         'product_id' => $consumption->product_id,
                         'cost_type' => 'material',
                         'quantity' => $consumption->qty_planned,
                         'unit_cost' => $costPerUnit,
                         'total_cost' => $standardCost,
-                        'notes' => 'Standard Material: ' . $product->name,
+                        'notes' => 'Standard Material: ' . ($product->name ?? 'Product #' . $consumption->product_id),
                         'created_at' => now(),
                     ]);
                 }
@@ -372,13 +399,14 @@ class ManufacturingOrderService
                 // Variance Cost (material_variance) - only record if significant
                 if (abs($varianceCost) > 0.0001) {
                     \App\Models\CostEntry::create([
+                        'organization_id' => $mo->organization_id,
                         'manufacturing_order_id' => $mo->id,
                         'product_id' => $consumption->product_id,
                         'cost_type' => 'material_variance',
                         'quantity' => $varianceQty,
                         'unit_cost' => $costPerUnit,
                         'total_cost' => $varianceCost,
-                        'notes' => 'Variance: ' . $product->name . ' (' . ($varianceQty > 0 ? 'Over' : 'Under') . ' consumption)',
+                        'notes' => 'Variance: ' . ($product->name ?? 'Product #' . $consumption->product_id) . ' (' . ($varianceQty > 0 ? 'Over' : 'Under') . ' consumption)',
                         'created_at' => now(),
                     ]);
                 }
