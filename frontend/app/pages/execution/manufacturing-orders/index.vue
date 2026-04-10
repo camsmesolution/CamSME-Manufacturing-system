@@ -91,7 +91,7 @@
               draggable="true"
               @dragstart="onDragStart($event, mo)"
               @dragend="onDragEnd"
-              @click="viewOrder(mo.id)"
+              @click="openDetail(mo)"
               :class="['text-xs p-2 rounded cursor-move shadow-sm border-l-4', getStatusColor(mo.status)]"
               :title="`${mo.name}: ${mo.product?.name} (${mo.qty_to_produce})`"
             >
@@ -732,7 +732,7 @@ function getStatusColor(status: string) {
   return colors[status] || 'bg-gray-200 text-gray-800 border-gray-400'
 }
 
-function viewOrder(id: number) { navigateTo(`/execution/manufacturing-orders/${id}`) }
+
 function progressPercent(mo: ManufacturingOrder) {
   if (!mo.qty_to_produce) return 0
   return mo.qty_to_produce > 0 ? (mo.qty_produced / mo.qty_to_produce) * 100 : 0
