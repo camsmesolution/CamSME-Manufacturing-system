@@ -45,8 +45,21 @@ class MaintenanceRequest extends Model
 
         static::creating(function ($model) {
             if (empty($model->name)) {
-                $count = static::whereYear('created_at', now()->year)->count() + 1;
-                $model->name = 'MR-' . now()->year . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
+                $year = now()->year;
+                $latest = static::withoutGlobalScope('organization')
+                    ->withTrashed()
+                    ->whereYear('created_at', $year)
+                    ->where('name', 'like', "MR-{$year}-%")
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($latest && preg_match('/MR-\d{4}-(\d+)/', $latest->name, $matches)) {
+                    $count = intval($matches[1]) + 1;
+                } else {
+                    $count = 1;
+                }
+
+                $model->name = 'MR-' . $year . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
             }
         });
     }
