@@ -58,8 +58,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="bom in boms" :key="bom.id">
-            <td>
+          <tr v-for="bom in boms" :key="bom.id" class="hover:bg-gray-50 cursor-pointer transition-colors" @click="openDetail(bom)">
+            <td @click.stop>
                 <div 
                     class="w-10 h-10 rounded bg-gray-50 border border-gray-200 flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary-500 hover:ring-offset-1 transition-all"
                      @click="openImage(bom.product?.image_url, bom.product?.name)"
@@ -73,10 +73,8 @@
                 </div>
             </td>
             <td class="font-mono text-sm">#{{ bom.id }}</td>
-            <td class="font-medium">
-                <button @click="openDetail(bom)" class="text-primary-600 hover:underline font-medium">
+            <td class="font-medium text-primary-600">
                     {{ bom.product?.name || 'N/A' }}
-                </button>
             </td>
             <td>
               <span :class="bom.type === 'phantom' ? 'badge-warning' : 'badge-info'">
@@ -91,7 +89,7 @@
                 {{ bom.is_active ? 'Active' : 'Inactive' }}
               </span>
             </td>
-            <td>
+            <td @click.stop>
               <div class="flex gap-2">
                 <UiIconButton
                   @click="openDetail(bom)"

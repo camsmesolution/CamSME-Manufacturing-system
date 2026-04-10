@@ -129,11 +129,9 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="mo in tableOrders" :key="mo.id" class="hover:bg-gray-50">
-            <td>
-              <button @click="openDetail(mo)" class="font-medium text-primary-600 hover:underline">
+          <tr v-for="mo in tableOrders" :key="mo.id" class="hover:bg-gray-50 cursor-pointer transition-colors" @click="openDetail(mo)">
+            <td class="font-medium text-primary-600">
                 {{ mo.name }}
-              </button>
             </td>
             <td>
               <div class="flex items-center gap-2">
@@ -168,7 +166,7 @@
             <td><UiPriorityBadge :priority="mo.priority" /></td>
             <td class="text-sm text-gray-500">{{ formatDate(mo.scheduled_start) }}</td>
             <td class="text-sm text-gray-500">{{ formatDate(mo.scheduled_end) }}</td>
-            <td>
+            <td @click.stop>
               <div class="flex gap-2">
                 <!-- Schedule button -->
                 <UiIconButton 
@@ -231,7 +229,6 @@
 
                 <!-- Delete -->
                 <UiIconButton
-                   v-if="mo.status === 'draft'"
                    @click="deleteOrder(mo)"
                    icon="heroicons:trash"
                    tooltip="Delete"
@@ -663,9 +660,12 @@ function handleConfirm() {
 
 function deleteOrder(mo: ManufacturingOrder) {
     if (actionLoading.value) return
+    const statusWarning = mo.status !== 'draft' 
+        ? ' All related work orders, consumptions, and cost entries will be removed. Stock changes will be reversed.' 
+        : ''
     openConfirmModal(
-        'Delete Order', 
-        `Are you sure you want to delete MO #${mo.id}? This cannot be undone.`, 
+        'Delete Manufacturing Order', 
+        `Are you sure you want to delete ${mo.name}?${statusWarning} This action cannot be undone.`, 
         () => handleAction(mo, () => $api(`/manufacturing-orders/${mo.id}`, { method: 'DELETE' }), 'Order deleted')
     )
 }

@@ -8,278 +8,385 @@
       </div>
     </div>
 
-    <!-- Tabs & Search -->
-    <div class="flex flex-col gap-4">
-      <!-- Tabs -->
-      <div class="border-b border-gray-200 overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
-        <nav class="-mb-px flex gap-2">
-          <button 
-            v-for="status in ['all', 'ready', 'in_progress', 'paused', 'pending', 'done']"
-            :key="status"
-            @click="filters.status = status === 'all' ? '' : status"
-            :class="[
-              (filters.status === status || (status === 'all' && filters.status === ''))
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
-              'whitespace-nowrap px-4 py-2 border-b-2 font-medium text-sm transition-colors capitalize'
-            ]"
-          >
-            {{ status.replace('_', ' ') }}
-            <span class="ml-2 py-0.5 px-2 rounded-full text-xs" 
-              :class="[
-                (filters.status === status || (status === 'all' && filters.status === '')) 
-                  ? (status === 'all' ? 'bg-gray-100 text-gray-800' : 
-                     status === 'ready' ? 'bg-blue-100 text-blue-700' :
-                     status === 'in_progress' ? 'bg-primary-100 text-primary-700' :
-                     status === 'paused' ? 'bg-amber-100 text-amber-700' :
-                     status === 'done' ? 'bg-green-100 text-green-700' :
-                     'bg-gray-100 text-gray-600')
-                  : (status === 'ready' ? 'bg-blue-50 text-blue-600' :
-                     status === 'in_progress' ? 'bg-primary-50 text-primary-600' :
-                     status === 'paused' ? 'bg-amber-50 text-amber-600' :
-                     status === 'done' ? 'bg-green-50 text-green-600' :
-                     'bg-gray-100 text-gray-600')
-              ]">
-              {{ status === 'all' ? (counts.all || total) : (counts[status] || 0) }}
-            </span>
-          </button>
-        </nav>
-      </div>
-
-      <!-- Search -->
-      <div class="flex">
-        <input v-model="search" type="text" placeholder="Search by MO or work center..." class="input max-w-xs" />
-      </div>
+    <!-- Status Tabs -->
+    <div class="flex gap-2 border-b border-gray-200 overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
+      <button 
+        @click="filters.status = ''" 
+        :class="['px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap', filters.status === '' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700']"
+      >
+        All <span :class="['ml-1 text-xs px-1.5 py-0.5 rounded-full', filters.status === '' ? 'bg-gray-100 text-gray-800' : 'bg-gray-100 text-gray-600']">{{ counts.all || total }}</span>
+      </button>
+      <button 
+        v-for="status in ['draft', 'confirmed', 'in_progress', 'done', 'scheduled']" 
+        :key="status"
+        @click="filters.status = status" 
+        :class="['px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors capitalize whitespace-nowrap', filters.status === status ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700']"
+      >
+        {{ status.replace('_', ' ') }} 
+        <span 
+          :class="[
+            'ml-1 text-xs px-1.5 py-0.5 rounded-full', 
+            status === 'draft' ? 'bg-gray-100 text-gray-700' :
+            status === 'confirmed' ? 'bg-blue-100 text-blue-700' :
+            status === 'in_progress' ? 'bg-orange-100 text-orange-700' :
+            status === 'done' ? 'bg-green-100 text-green-700' :
+            'bg-purple-100 text-purple-700'
+          ]"
+        >
+          {{ counts[status] || 0 }}
+        </span>
+      </button>
     </div>
 
-    <!-- Work Order Cards (Kanban-like) -->
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      <!-- Skeletons -->
-      <template v-if="loading">
-        <div v-for="i in 6" :key="`skel-${i}`" class="card p-4 animate-pulse">
-            <div class="flex justify-between mb-4">
-                <div class="flex gap-2">
-                    <div>
-                        <div class="h-4 bg-gray-200 rounded w-24 mb-1"></div>
-                        <div class="h-3 bg-gray-200 rounded w-16"></div>
-                    </div>
+    <!-- Search -->
+    <div class="flex gap-4">
+      <input v-model="search" type="text" placeholder="Search by MO name or product..." class="input max-w-xs" />
+    </div>
+
+    <!-- MO Table -->
+    <div class="card p-0 overflow-hidden">
+      <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Product</th>
+            <th>Progress</th>
+            <th>Status</th>
+            <th>Priority</th>
+            <th>Work Orders</th>
+            <th>Start</th>
+            <th>End</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="mo in tableOrders" :key="mo.id" class="hover:bg-gray-50 cursor-pointer transition-colors" @click="openMoDetail(mo)">
+            <td class="font-medium text-primary-600">
+              {{ mo.name }}
+            </td>
+            <td>
+              <div class="flex items-center gap-2">
+                <div 
+                  class="w-8 h-8 rounded overflow-hidden bg-gray-100 flex items-center justify-center"
+                >
+                  <img 
+                    v-if="mo.product?.image_url" 
+                    :src="getImageUrl(mo.product.image_url)" 
+                    :alt="mo.product.name"
+                    class="w-full h-full object-cover"
+                  />
+                  <Icon v-else name="heroicons:cube" class="w-4 h-4 text-gray-400" />
                 </div>
-                 <div class="h-5 bg-gray-200 rounded w-16"></div>
-            </div>
-             <div class="h-3 bg-gray-200 rounded w-full mb-2"></div>
-             <div class="h-8 bg-gray-200 rounded w-full mt-4"></div>
-        </div>
-      </template>
-
-      <div v-for="wo in workOrders" :key="wo.id" class="card">
-        <!-- Header -->
-        <div class="flex items-start justify-between mb-3">
-          <div>
-            <div class="flex items-center gap-2 mb-1">
-              <span class="text-sm font-mono text-gray-500">#{{ wo.id }}</span>
-              <UiStatusBadge :status="wo.status" />
-            </div>
-            <h3 class="font-medium text-gray-800">{{ wo.operation?.name || 'Operation' }}</h3>
-          </div>
-          <span class="text-xs bg-gray-100 px-2 py-1 rounded font-mono">
-            {{ wo.manufacturing_order?.name || `MO #${wo.manufacturing_order_id}` }}
-          </span>
-        </div>
-
-        <!-- Work Center -->
-        <div class="flex items-center gap-2 text-sm text-gray-600 mb-2">
-          <Icon name="heroicons:cog-6-tooth" class="w-4 h-4 text-gray-400" />
-          <span>{{ wo.work_center?.name || 'N/A' }}</span>
-        </div>
-
-        <!-- QA Required Badge -->
-        <div v-if="wo.operation?.needs_quality_check" class="flex items-center justify-between mb-3">
-          <div class="flex items-center gap-2 text-sm">
-            <span class="badge bg-yellow-100 text-yellow-800 flex items-center gap-1">
-              <Icon name="heroicons:clipboard-document-check" class="w-3.5 h-3.5" />
-              QA Required
-            </span>
-          </div>
-          
-          <!-- Auto QA Buttons or Status -->
-          <div v-if="wo.status === 'done'">
-             <div v-if="wo.qa_status && wo.qa_status !== 'pending'" class="flex items-center gap-1 text-sm font-medium">
-                <span 
-                    v-if="wo.qa_status === 'pass'" 
-                    class="text-green-700 bg-green-50 px-2 py-1 rounded flex items-center gap-1 cursor-help"
-                    :title="`Passed by ${wo.qa_user?.name || 'Unknown'} at ${wo.qa_at || 'N/A'}`"
-                >
-                   <Icon name="heroicons:check-badge" class="w-4 h-4" />
-                   QA Passed
-                </span>
-                 <span 
-                    v-else 
-                    class="text-red-700 bg-red-50 px-2 py-1 rounded flex items-center gap-1 cursor-help" 
-                    :title="`Failed by ${wo.qa_user?.name || 'Unknown'} at ${wo.qa_at || 'N/A'}. Reason: ${wo.qa_comments}`"
-                >
-                   <Icon name="heroicons:x-circle" class="w-4 h-4" />
-                   QA Failed
-                </span>
-                <!-- View Details Button -->
-                 <button @click="openQaModal(wo, wo.qa_status)" class="text-xs text-gray-400 hover:text-gray-600 ml-1">
-                    <Icon name="heroicons:information-circle" class="w-4 h-4" />
-                 </button>
-             </div>
-             <div v-else class="flex gap-2">
-                <button 
-                    @click="openQaModal(wo, 'pass')" 
-                    :disabled="processingId === wo.id"
-                    class="btn-xs bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 flex items-center gap-1 rounded px-2 py-1"
-                >
-                    <Icon name="heroicons:check" class="w-3 h-3" /> Pass
-                </button>
-                 <button 
-                    @click="openQaModal(wo, 'fail')" 
-                    :disabled="processingId === wo.id"
-                    class="btn-xs bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 flex items-center gap-1 rounded px-2 py-1"
-                >
-                    <Icon name="heroicons:x-mark" class="w-3 h-3" /> Fail
-                </button>
-             </div>
-          </div>
-        </div>
-
-        <div v-else class="mb-3"></div>
-
-        <!-- Time Progress -->
-        <div class="mb-4">
-          <div class="flex justify-between text-xs text-gray-500 mb-1">
-            <span>Duration</span>
-            <span>{{ formatDuration(getLiveDuration(wo)) }} / {{ formatDuration(wo.duration_expected) }}</span>
-          </div>
-          <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div 
-              class="h-full rounded-full transition-all"
-              :class="durationClass(wo)"
-              :style="{ width: `${Math.min(durationPercent(wo), 100)}%` }"
-            ></div>
-          </div>
-        </div>
-
-        <div class="flex gap-2 pt-3 border-t">
-          <UiIconButton
-            v-if="wo.operation?.instruction_file_url"
-            tag="a"
-            :href="getImageUrl(wo.operation.instruction_file_url)"
-            target="_blank"
-            icon="heroicons:document-text"
-            tooltip="View Instructions"
-            class="flex-none border border-primary-100"
-            color="text-primary-600 hover:text-primary-800"
-          />
-          
-          <button
-            v-if="wo.status === 'pending'"
-            disabled
-            class="btn-outline text-xs flex-1 opacity-50 cursor-not-allowed justify-center"
-          >
-            <Icon name="heroicons:clock" class="w-3 h-3" />
-            Pending
-          </button>
-          
-          <button
-            v-if="wo.status === 'ready'"
-            @click="start(wo)"
-            :disabled="processingId === wo.id"
-            class="btn-outline text-xs flex-1 text-primary-600 border-primary-200 bg-primary-50 hover:bg-primary-100 justify-center"
-          >
-            <Icon v-if="processingId === wo.id" name="heroicons:arrow-path" class="w-3 h-3 animate-spin" />
-            <Icon v-else name="heroicons:play" class="w-3 h-3" />
-            Start
-          </button>
-          
-           <button
-            v-if="wo.status === 'in_progress'"
-            @click="pause(wo)"
-            :disabled="processingId === wo.id"
-            class="btn-outline text-xs flex-1 text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100 justify-center"
-          >
-            <Icon v-if="processingId === wo.id" name="heroicons:arrow-path" class="w-3 h-3 animate-spin" />
-            <Icon v-else name="heroicons:pause" class="w-3 h-3" />
-            Pause
-          </button>
-          
-           <button
-            v-if="wo.status === 'in_progress'"
-            @click="openFinishModal(wo)"
-            :disabled="processingId === wo.id"
-            class="btn-outline text-xs flex-1 text-green-600 border-green-200 bg-green-50 hover:bg-green-100 justify-center"
-          >
-            <Icon v-if="processingId === wo.id" name="heroicons:arrow-path" class="w-3 h-3 animate-spin" />
-            <Icon v-else name="heroicons:check" class="w-3 h-3" />
-            Done
-          </button>
-          
-           <button
-            v-if="wo.status === 'paused'"
-            @click="resume(wo)"
-            :disabled="processingId === wo.id"
-            class="btn-outline text-xs flex-1 text-primary-600 border-primary-200 bg-primary-50 hover:bg-primary-100 justify-center"
-          >
-            <Icon v-if="processingId === wo.id" name="heroicons:arrow-path" class="w-3 h-3 animate-spin" />
-            <Icon v-else name="heroicons:play" class="w-3 h-3" />
-            Resume
-          </button>
-           <button
-            v-if="wo.status === 'paused'"
-            @click="openFinishModal(wo)"
-            :disabled="processingId === wo.id"
-            class="btn-outline text-xs flex-1 text-green-600 border-green-200 bg-green-50 hover:bg-green-100 justify-center"
-          >
-            <Icon v-if="processingId === wo.id" name="heroicons:arrow-path" class="w-3 h-3 animate-spin" />
-            <Icon v-else name="heroicons:check" class="w-3 h-3" />
-            Done
-          </button>
-          
-          <div v-if="wo.status === 'done'" class="flex-1 text-center text-sm text-green-600 font-medium py-2">
-            <Icon name="heroicons:check-circle" class="w-4 h-4 inline" />
-            Completed
-          </div>
-        </div>
+                <span>{{ mo.product?.name || 'N/A' }}</span>
+              </div>
+            </td>
+            <td>
+              <div class="flex items-center gap-2">
+                <div class="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div 
+                    class="h-full rounded-full transition-all" 
+                    :class="progressClass(mo)"
+                    :style="{ width: `${progressPercent(mo)}%` }"
+                  ></div>
+                </div>
+                <span class="text-sm text-gray-600">{{ Number(mo.qty_produced) }}/{{ Number(mo.qty_to_produce) }}</span>
+              </div>
+            </td>
+            <td><UiStatusBadge :status="mo.status" /></td>
+            <td><UiPriorityBadge :priority="mo.priority" /></td>
+            <td>
+              <span class="text-sm text-gray-600">{{ getWoCountForMo(mo.id) }} orders</span>
+            </td>
+            <td class="text-sm text-gray-500">{{ formatDate(mo.scheduled_start) }}</td>
+            <td class="text-sm text-gray-500">{{ formatDate(mo.scheduled_end) }}</td>
+          </tr>
+          <tr v-if="tableOrders.length === 0 && !loading">
+            <td colspan="8">
+              <UiEmptyState 
+                title="No manufacturing orders found" 
+                description="Work orders are created when you confirm a Manufacturing Order."
+                icon="heroicons:clipboard-document-list"
+              />
+            </td>
+          </tr>
+        </tbody>
+        <tbody v-if="loading">
+          <tr v-for="i in 5" :key="i" class="animate-pulse">
+            <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-24"></div></td>
+            <td class="px-6 py-4"><div class="flex items-center gap-2"><div class="w-8 h-8 bg-gray-200 rounded"></div><div class="h-4 bg-gray-200 rounded w-32"></div></div></td>
+            <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-20"></div></td>
+            <td class="px-6 py-4"><div class="h-6 bg-gray-200 rounded w-16"></div></td>
+            <td class="px-6 py-4"><div class="h-6 bg-gray-200 rounded w-16"></div></td>
+            <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-16"></div></td>
+            <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-24"></div></td>
+            <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-24"></div></td>
+          </tr>
+        </tbody>
+      </table>
       </div>
-    </div>
 
-    <!-- Empty State -->
-    <UiEmptyState 
-      v-if="workOrders.length === 0 && !loading"
-      title="No work orders found" 
-      description="Work orders are created when you confirm a Manufacturing Order"
-      icon="heroicons:clipboard-document-list"
-    />
-
-    <!-- Pagination -->
-    <UiPagination
+      <!-- Pagination -->
+      <UiPagination
         v-if="Math.ceil(total / perPage) > 1"
         v-model="page"
         :total-items="total"
         :page-size="perPage"
-    />
-  </div>
+      />
+    </div>
 
-  <!-- Finish Modal (Refactored to SlideOver for consistency) -->
-  <UiSlideOver v-model="showFinishModal" title="Complete Work Order" width="sm:w-[400px]">
-    <form @submit.prevent="confirmFinish" class="space-y-4">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Quantity Produced</label>
-        <input v-model.number="finishForm.quantity" type="number" step="0.0001" class="input" required min="0" />
-        <p class="text-xs text-gray-500 mt-1">Enter the actual quantity produced in this step.</p>
-      </div>
-      <div class="flex justify-end gap-3 pt-4">
-        <button type="button" @click="showFinishModal = false" class="btn-ghost">Cancel</button>
-        <button type="submit" class="btn-primary" :disabled="processingId === finishingWo?.id">
-          Complete
-        </button>
-      </div>
-    </form>
-  </UiSlideOver>
+    <!-- MO Detail SlideOver (Work Orders for selected MO) -->
+    <UiSlideOver v-model="showDetailModal" :title="selectedMo ? `Work Orders — ${selectedMo.name}` : 'Work Orders'" width="sm:w-[75vw]">
+      <div v-if="selectedMo" class="space-y-6">
+        <!-- MO Summary -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 class="font-semibold text-gray-900">{{ selectedMo.name }}</h3>
+              <p class="text-sm text-gray-500">{{ selectedMo.product?.name || 'N/A' }}</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <UiStatusBadge :status="selectedMo.status" />
+              <UiPriorityBadge :priority="selectedMo.priority" />
+            </div>
+          </div>
+          <div v-if="selectedMo" class="mt-3 flex items-center gap-4 text-sm">
+            <div class="flex items-center gap-2">
+              <span class="text-gray-500">Progress:</span>
+              <div class="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  class="h-full rounded-full transition-all" 
+                  :class="selectedMo ? progressClass(selectedMo) : ''"
+                  :style="{ width: selectedMo ? `${progressPercent(selectedMo)}%` : '0%' }"
+                ></div>
+              </div>
+              <span class="font-medium">{{ Number(selectedMo?.qty_produced || 0) }}/{{ Number(selectedMo?.qty_to_produce || 0) }}</span>
+            </div>
+          </div>
+        </div>
 
-  <!-- QA Modal -->
-  <UiSlideOver v-model="showQaModal" title="Quality Check" width="sm:w-[400px]">
+        <!-- Loading Skeleton -->
+        <div v-if="loadingWos" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div v-for="i in 6" :key="`skel-${i}`" class="card p-4 animate-pulse">
+            <div class="flex justify-between mb-4">
+              <div class="flex gap-2">
+                <div>
+                  <div class="h-4 bg-gray-200 rounded w-24 mb-1"></div>
+                  <div class="h-3 bg-gray-200 rounded w-16"></div>
+                </div>
+              </div>
+              <div class="h-5 bg-gray-200 rounded w-16"></div>
+            </div>
+            <div class="h-3 bg-gray-200 rounded w-full mb-2"></div>
+            <div class="h-8 bg-gray-200 rounded w-full mt-4"></div>
+          </div>
+        </div>
+
+        <!-- Work Order Cards -->
+        <div v-if="!loadingWos && moWorkOrders.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div v-for="wo in moWorkOrders" :key="wo.id" class="card">
+            <!-- Header -->
+            <div class="flex items-start justify-between mb-3">
+              <div>
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs font-mono text-gray-400">Step {{ wo.operation?.sequence || wo.sequence }}</span>
+                  <UiStatusBadge :status="wo.status" />
+                </div>
+                <h3 class="font-medium text-gray-800">{{ wo.operation?.name || 'Operation' }}</h3>
+              </div>
+              <div class="text-right">
+                <span class="text-xs bg-gray-100 px-2 py-1 rounded font-mono">
+                  WO #{{ wo.id }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Work Center -->
+            <div class="flex items-center gap-2 text-sm text-gray-600 mb-2">
+              <Icon name="heroicons:cog-6-tooth" class="w-4 h-4 text-gray-400" />
+              <span>{{ wo.work_center?.name || 'N/A' }}</span>
+            </div>
+
+            <!-- QA Required Badge -->
+            <div v-if="wo.operation?.needs_quality_check" class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2 text-sm">
+                <span class="badge bg-yellow-100 text-yellow-800 flex items-center gap-1">
+                  <Icon name="heroicons:clipboard-document-check" class="w-3.5 h-3.5" />
+                  QA Required
+                </span>
+              </div>
+              
+              <!-- Auto QA Buttons or Status -->
+              <div v-if="wo.status === 'done'">
+                 <div v-if="wo.qa_status && wo.qa_status !== 'pending'" class="flex items-center gap-1 text-sm font-medium">
+                    <span 
+                        v-if="wo.qa_status === 'pass'" 
+                        class="text-green-700 bg-green-50 px-2 py-1 rounded flex items-center gap-1 cursor-help"
+                        :title="`Passed by ${wo.qa_user?.name || 'Unknown'} at ${wo.qa_at || 'N/A'}`"
+                    >
+                       <Icon name="heroicons:check-badge" class="w-4 h-4" />
+                       QA Passed
+                    </span>
+                     <span 
+                        v-else 
+                        class="text-red-700 bg-red-50 px-2 py-1 rounded flex items-center gap-1 cursor-help" 
+                        :title="`Failed by ${wo.qa_user?.name || 'Unknown'} at ${wo.qa_at || 'N/A'}. Reason: ${wo.qa_comments}`"
+                    >
+                       <Icon name="heroicons:x-circle" class="w-4 h-4" />
+                       QA Failed
+                    </span>
+                    <!-- View Details Button -->
+                     <button @click="openQaModal(wo, wo.qa_status)" class="text-xs text-gray-400 hover:text-gray-600 ml-1">
+                        <Icon name="heroicons:information-circle" class="w-4 h-4" />
+                     </button>
+                 </div>
+                 <div v-else class="flex gap-2">
+                    <button 
+                        @click="openQaModal(wo, 'pass')" 
+                        :disabled="processingId === wo.id"
+                        class="btn-xs bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 flex items-center gap-1 rounded px-2 py-1"
+                    >
+                        <Icon name="heroicons:check" class="w-3 h-3" /> Pass
+                    </button>
+                     <button 
+                        @click="openQaModal(wo, 'fail')" 
+                        :disabled="processingId === wo.id"
+                        class="btn-xs bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 flex items-center gap-1 rounded px-2 py-1"
+                    >
+                        <Icon name="heroicons:x-mark" class="w-3 h-3" /> Fail
+                    </button>
+                 </div>
+              </div>
+            </div>
+
+            <div v-else class="mb-3"></div>
+
+            <!-- Time Progress -->
+            <div class="mb-4">
+              <div class="flex justify-between text-xs text-gray-500 mb-1">
+                <span>Duration</span>
+                <span>{{ formatDuration(getLiveDuration(wo)) }} / {{ formatDuration(wo.duration_expected) }}</span>
+              </div>
+              <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  class="h-full rounded-full transition-all"
+                  :class="durationClass(wo)"
+                  :style="{ width: `${Math.min(durationPercent(wo), 100)}%` }"
+                ></div>
+              </div>
+            </div>
+
+            <div class="flex gap-2 pt-3 border-t">
+              <UiIconButton
+                v-if="wo.operation?.instruction_file_url"
+                tag="a"
+                :href="getImageUrl(wo.operation.instruction_file_url)"
+                target="_blank"
+                icon="heroicons:document-text"
+                tooltip="View Instructions"
+                class="flex-none border border-primary-100"
+                color="text-primary-600 hover:text-primary-800"
+              />
+              
+              <button
+                v-if="wo.status === 'pending'"
+                disabled
+                class="btn-outline text-xs flex-1 opacity-50 cursor-not-allowed justify-center"
+              >
+                <Icon name="heroicons:clock" class="w-3 h-3" />
+                Pending
+              </button>
+              
+              <button
+                v-if="wo.status === 'ready'"
+                @click="start(wo)"
+                :disabled="processingId === wo.id"
+                class="btn-outline text-xs flex-1 text-primary-600 border-primary-200 bg-primary-50 hover:bg-primary-100 justify-center"
+              >
+                <Icon v-if="processingId === wo.id" name="heroicons:arrow-path" class="w-3 h-3 animate-spin" />
+                <Icon v-else name="heroicons:play" class="w-3 h-3" />
+                Start
+              </button>
+              
+               <button
+                v-if="wo.status === 'in_progress'"
+                @click="pause(wo)"
+                :disabled="processingId === wo.id"
+                class="btn-outline text-xs flex-1 text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100 justify-center"
+              >
+                <Icon v-if="processingId === wo.id" name="heroicons:arrow-path" class="w-3 h-3 animate-spin" />
+                <Icon v-else name="heroicons:pause" class="w-3 h-3" />
+                Pause
+              </button>
+              
+               <button
+                v-if="wo.status === 'in_progress'"
+                @click="openFinishModal(wo)"
+                :disabled="processingId === wo.id"
+                class="btn-outline text-xs flex-1 text-green-600 border-green-200 bg-green-50 hover:bg-green-100 justify-center"
+              >
+                <Icon v-if="processingId === wo.id" name="heroicons:arrow-path" class="w-3 h-3 animate-spin" />
+                <Icon v-else name="heroicons:check" class="w-3 h-3" />
+                Done
+              </button>
+              
+               <button
+                v-if="wo.status === 'paused'"
+                @click="resume(wo)"
+                :disabled="processingId === wo.id"
+                class="btn-outline text-xs flex-1 text-primary-600 border-primary-200 bg-primary-50 hover:bg-primary-100 justify-center"
+              >
+                <Icon v-if="processingId === wo.id" name="heroicons:arrow-path" class="w-3 h-3 animate-spin" />
+                <Icon v-else name="heroicons:play" class="w-3 h-3" />
+                Resume
+              </button>
+               <button
+                v-if="wo.status === 'paused'"
+                @click="openFinishModal(wo)"
+                :disabled="processingId === wo.id"
+                class="btn-outline text-xs flex-1 text-green-600 border-green-200 bg-green-50 hover:bg-green-100 justify-center"
+              >
+                <Icon v-if="processingId === wo.id" name="heroicons:arrow-path" class="w-3 h-3 animate-spin" />
+                <Icon v-else name="heroicons:check" class="w-3 h-3" />
+                Done
+              </button>
+              
+              <div v-if="wo.status === 'done'" class="flex-1 text-center text-sm text-green-600 font-medium py-2">
+                <Icon name="heroicons:check-circle" class="w-4 h-4 inline" />
+                Completed
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <UiEmptyState 
+          v-if="!loadingWos && moWorkOrders.length === 0"
+          title="No work orders found" 
+          description="This manufacturing order has no work orders yet. Work orders are created when you confirm the MO."
+          icon="heroicons:clipboard-document-list"
+        />
+      </div>
+    </UiSlideOver>
+
+    <!-- Finish Modal -->
+    <UiSlideOver v-model="showFinishModal" title="Complete Work Order" width="sm:w-[400px]">
+      <form @submit.prevent="confirmFinish" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Quantity Produced</label>
+          <input v-model.number="finishForm.quantity" type="number" step="0.0001" class="input" required min="0" />
+          <p class="text-xs text-gray-500 mt-1">Enter the actual quantity produced in this step.</p>
+        </div>
+        <div class="flex justify-end gap-3 pt-4">
+          <button type="button" @click="showFinishModal = false" class="btn-ghost">Cancel</button>
+          <button type="submit" class="btn-primary" :disabled="processingId === finishingWo?.id">
+            Complete
+          </button>
+        </div>
+      </form>
+    </UiSlideOver>
+
+    <!-- QA Modal -->
+    <UiSlideOver v-model="showQaModal" title="Quality Check" width="sm:w-[400px]">
       <form @submit.prevent="submitQa" class="space-y-6">
           <!-- Status Selection -->
           <div>
@@ -322,84 +429,127 @@
                 </button>
           </div>
       </form>
-  </UiSlideOver>
-
-
-
+    </UiSlideOver>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { useExecutionStore } from '~/stores/execution'
-import type { WorkOrder } from '~/types/models'
+import type { ManufacturingOrder, WorkOrder } from '~/types/models'
 
 const executionStore = useExecutionStore()
 
 const { $api } = useApi()
 const toast = useToast()
-const { getImageUrl } = useUtils()
+const { getImageUrl, formatDate } = useUtils()
 
-// Data Table (Client-side)
+// Data Table (Client-side) — MO-based
 const loading = ref(true)
 const search = ref('')
 const filters = ref({ status: '' })
 const page = ref(1)
-const perPage = ref(12)
+const perPage = ref(10)
 
+const mos = computed(() => executionStore.manufacturingOrders as ManufacturingOrder[])
 const allWorkOrders = computed(() => executionStore.workOrders as WorkOrder[])
 
-// Counts
+// Client-side Counts (MO status counts)
 const counts = computed<Record<string, number>>(() => {
-  const list = allWorkOrders.value
+  const list = mos.value
   return {
     all: list.length,
-    ready: list.filter(w => w.status === 'ready').length,
-    in_progress: list.filter(w => w.status === 'in_progress').length,
-    paused: list.filter(w => w.status === 'paused').length,
-    pending: list.filter(w => w.status === 'pending').length,
-    done: list.filter(w => w.status === 'done').length,
+    draft: list.filter(m => m.status === 'draft').length,
+    confirmed: list.filter(m => m.status === 'confirmed').length,
+    in_progress: list.filter(m => m.status === 'in_progress').length,
+    done: list.filter(m => m.status === 'done').length,
+    scheduled: list.filter(m => m.status === 'scheduled').length,
   }
 })
 
+// Filtered & Sorted Items
 const filteredItems = computed(() => {
-  let result = allWorkOrders.value
-  
+  let result = mos.value
+
+  // Status Filter
   if (filters.value.status) {
-    result = result.filter(w => w.status === filters.value.status)
+    result = result.filter(m => m.status === filters.value.status)
   }
 
+  // Search Filter
   if (search.value) {
     const q = search.value.toLowerCase()
-    result = result.filter(w => 
-      w.manufacturing_order?.name?.toLowerCase().includes(q) ||
-      w.work_center?.name?.toLowerCase().includes(q)
+    result = result.filter(m => 
+      m.name?.toLowerCase().includes(q) || 
+      m.product?.name?.toLowerCase().includes(q) ||
+      m.product?.code?.toLowerCase().includes(q)
     )
   }
 
-  // Sort by id desc
-  return result.sort((a,b) => b.id - a.id)
+  // Sort by created_at desc
+  return result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 })
 
 const total = computed(() => filteredItems.value.length)
 
-const workOrders = computed(() => {
-    const start = (page.value - 1) * perPage.value
-    return filteredItems.value.slice(start, start + perPage.value)
+const tableOrders = computed(() => {
+  const start = (page.value - 1) * perPage.value
+  return filteredItems.value.slice(start, start + perPage.value)
 })
 
+function getWoCountForMo(moId: number): number {
+  return allWorkOrders.value.filter(w => w.manufacturing_order_id === moId).length
+}
+
 async function refresh(force = false) {
-    loading.value = true
-    try {
-        await executionStore.fetchWorkOrders(force)
-    } finally {
-        loading.value = false
-    }
+  loading.value = true
+  try {
+    await Promise.all([
+      executionStore.fetchManufacturingOrders(force),
+      executionStore.fetchWorkOrders(force),
+    ])
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(() => refresh())
 
-const now = useNow()
+// MO Detail SlideOver
+const showDetailModal = ref(false)
+const selectedMo = ref<ManufacturingOrder | null>(null)
+const moWorkOrders = ref<WorkOrder[]>([])
+const loadingWos = ref(false)
+
+async function openMoDetail(mo: ManufacturingOrder) {
+  selectedMo.value = mo
+  showDetailModal.value = true
+  loadingWos.value = true
+  
+  try {
+    // Get WOs for this MO from the store data
+    moWorkOrders.value = allWorkOrders.value
+      .filter(w => w.manufacturing_order_id === mo.id)
+      .sort((a, b) => (a.operation?.sequence || a.sequence || 0) - (b.operation?.sequence || b.sequence || 0))
+  } finally {
+    loadingWos.value = false
+  }
+}
+
+// Progress helpers
+function progressPercent(mo: ManufacturingOrder) {
+  if (!mo.qty_to_produce) return 0
+  return mo.qty_to_produce > 0 ? (mo.qty_produced / mo.qty_to_produce) * 100 : 0
+}
+function progressClass(mo: ManufacturingOrder) {
+  const percent = progressPercent(mo)
+  if (percent >= 100) return 'bg-green-500'
+  if (percent > 0) return 'bg-primary-500'
+  return 'bg-gray-300'
+}
 
 // Live duration calculation
+const now = useNow()
+
 function getLiveDuration(wo: WorkOrder) {
   if (wo.status !== 'in_progress' || !wo.started_at) return wo.duration_actual
   const start = new Date(wo.started_at).getTime()
@@ -455,7 +605,16 @@ async function handleAction(wo: WorkOrder, action: () => Promise<void>, successM
     try {
         await action()
         toast.success(successMsg)
-        refresh(true)
+        await refresh(true)
+        // Re-open the detail with updated data
+        if (selectedMo.value) {
+          moWorkOrders.value = allWorkOrders.value
+            .filter(w => w.manufacturing_order_id === selectedMo.value!.id)
+            .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+          // Update selected MO with latest data
+          const updatedMo = mos.value.find(m => m.id === selectedMo.value!.id)
+          if (updatedMo) selectedMo.value = updatedMo
+        }
     } catch (e: any) {
         toast.error(e.data?.message || 'Action failed')
     } finally {
@@ -485,7 +644,15 @@ async function confirmFinish() {
     })
     toast.success('Work order completed')
     showFinishModal.value = false
-    refresh(true)
+    await refresh(true)
+    // Re-open the detail with updated data
+    if (selectedMo.value) {
+      moWorkOrders.value = allWorkOrders.value
+        .filter(w => w.manufacturing_order_id === selectedMo.value!.id)
+        .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+      const updatedMo = mos.value.find(m => m.id === selectedMo.value!.id)
+      if (updatedMo) selectedMo.value = updatedMo
+    }
   } catch (e: any) {
     toast.error(e.data?.message || 'Failed to finish')
   } finally {
@@ -518,7 +685,12 @@ async function submitQa() {
         })
         toast.success(`QA Marked as ${qaForm.value.status.toUpperCase()}`)
         showQaModal.value = false
-        refresh(true)
+        await refresh(true)
+        if (selectedMo.value) {
+          moWorkOrders.value = allWorkOrders.value
+            .filter(w => w.manufacturing_order_id === selectedMo.value!.id)
+            .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+        }
     } catch(e) {
         toast.error('Failed to update QA status')
     } finally {

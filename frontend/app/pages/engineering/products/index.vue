@@ -64,8 +64,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="product in paginatedProducts" :key="product.id">
-            <td>
+          <tr v-for="product in paginatedProducts" :key="product.id" class="hover:bg-gray-50 cursor-pointer transition-colors" @click="openDetail(product)">
+            <td @click.stop>
               <div 
                   class="w-10 h-10 rounded bg-gray-50 border border-gray-200 flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary-500 hover:ring-offset-1 transition-all"
                   @click="openImage(product.image_url, product.name)"
@@ -80,9 +80,7 @@
             </td>
             <td class="font-mono text-sm">{{ product.code }}</td>
             <td class="font-medium">
-                <button @click="openDetail(product)" class="text-gray-900 hover:text-primary-600 hover:underline">
-                    {{ product.name }}
-                </button>
+                {{ product.name }}
             </td>
             <td>
               <span :class="typeClass(product.type)">{{ product.type }}</span>
@@ -95,7 +93,7 @@
                 {{ product.is_active ? 'Active' : 'Inactive' }}
               </span>
             </td>
-            <td>
+            <td @click.stop>
               <div class="flex gap-2">
                 <UiIconButton
                   @click="openDetail(product)"

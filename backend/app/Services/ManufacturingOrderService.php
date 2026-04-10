@@ -203,6 +203,14 @@ class ManufacturingOrderService
                 'actual_end' => now(),
             ]);
 
+            // Mark all non-done work orders as done
+            $mo->workOrders()
+                ->where('status', '!=', 'done')
+                ->update([
+                    'status' => 'done',
+                    'finished_at' => now(),
+                ]);
+
             // Release Reservations and Consume Stock
             $mo->load('consumptions');
 
@@ -363,6 +371,137 @@ class ManufacturingOrderService
             $mo->save();
 
             return $mo->load(['product', 'bom', 'consumptions']);
+        });
+    }
+
+    /**
+     * Delete/Cancel a manufacturing order with full stock reversal
+     */
+    public function delete(ManufacturingOrder $mo): void
+    {
+        DB::transaction(function () use ($mo) {
+            $mo->load(['consumptions', 'workOrders', 'scraps']);
+
+            // --- Handle stock based on MO status ---
+
+            if (in_array($mo->status, ['confirmed', 'scheduled', 'in_progress'])) {
+                // Release stock reservations made during prepareForExecution()
+                foreach ($mo->consumptions as $consumption) {
+                    if ($consumption->location_id) {
+                        $this->stockService->release(
+                            $consumption->product_id,
+                            $consumption->location_id,
+                            $consumption->qty_planned,
+                            $consumption->lot_id
+                        );
+
+                        // Record the adjustment
+                        \App\Models\StockAdjustment::create([
+                            'organization_id' => $mo->organization_id,
+                            'product_id' => $consumption->product_id,
+                            'location_id' => $consumption->location_id,
+                            'lot_id' => $consumption->lot_id,
+                            'quantity' => 0, // Reservation release, no qty change
+                            'reason' => 'mo_cancelled',
+                            'reference' => $mo->name,
+                            'notes' => 'Stock reservation released: MO cancelled',
+                            'user_id' => auth()->id(),
+                        ]);
+                    }
+                }
+            }
+
+            if ($mo->status === 'done') {
+                // Reverse consumed stock — add materials back
+                foreach ($mo->consumptions as $consumption) {
+                    if ($consumption->location_id && $consumption->qty_consumed > 0) {
+                        $location = \App\Models\Location::find($consumption->location_id);
+                        if ($location) {
+                            // Calculate net consumed (excluding what was already scrapped)
+                            $scrappedQty = Scrap::where('manufacturing_order_id', $mo->id)
+                                ->where('product_id', $consumption->product_id)
+                                ->sum('quantity');
+                            $netConsumed = max(0, $consumption->qty_consumed - $scrappedQty);
+
+                            if ($netConsumed > 0) {
+                                $this->stockService->adjust($location, [
+                                    'product_id' => $consumption->product_id,
+                                    'quantity' => $netConsumed,
+                                    'type' => 'add',
+                                    'lot_id' => $consumption->lot_id,
+                                    'reason' => 'mo_cancelled',
+                                    'reference' => $mo->name,
+                                    'notes' => 'Materials returned: MO cancelled/deleted',
+                                ]);
+                            }
+                        }
+                    }
+                }
+
+                // Reverse scrapped stock — add scrapped materials back
+                foreach ($mo->scraps as $scrap) {
+                    if ($scrap->location_id && $scrap->quantity > 0) {
+                        $location = \App\Models\Location::find($scrap->location_id);
+                        if ($location) {
+                            $this->stockService->adjust($location, [
+                                'product_id' => $scrap->product_id,
+                                'quantity' => $scrap->quantity,
+                                'type' => 'add',
+                                'lot_id' => $scrap->lot_id,
+                                'reason' => 'mo_cancelled',
+                                'reference' => $mo->name,
+                                'notes' => 'Scrapped materials returned: MO cancelled/deleted',
+                            ]);
+                        }
+                    }
+                }
+
+                // Remove finished goods that were produced
+                if ($mo->qty_produced > 0) {
+                    // Find the stock adjustment that added the finished goods
+                    $productionAdjustment = \App\Models\StockAdjustment::where('reference', $mo->name)
+                        ->where('reason', 'manufacturing_production')
+                        ->where('product_id', $mo->product_id)
+                        ->first();
+
+                    if ($productionAdjustment) {
+                        $location = \App\Models\Location::find($productionAdjustment->location_id);
+                        if ($location) {
+                            try {
+                                $this->stockService->adjust($location, [
+                                    'product_id' => $mo->product_id,
+                                    'quantity' => $mo->qty_produced,
+                                    'type' => 'subtract',
+                                    'lot_id' => $productionAdjustment->lot_id,
+                                    'reason' => 'mo_cancelled',
+                                    'reference' => $mo->name,
+                                    'notes' => 'Finished goods removed: MO cancelled/deleted',
+                                ]);
+                            } catch (\InvalidArgumentException $e) {
+                                // Stock may have been consumed/transferred already — log but don't block delete
+                                \Log::warning("Could not reverse finished goods for MO {$mo->name}: {$e->getMessage()}");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- Cleanup related records ---
+
+            // Delete all cost entries for this MO
+            \App\Models\CostEntry::where('manufacturing_order_id', $mo->id)->delete();
+
+            // Delete all scraps for this MO
+            $mo->scraps()->delete();
+
+            // Delete all work orders for this MO
+            $mo->workOrders()->forceDelete();
+
+            // Delete all consumptions for this MO
+            $mo->consumptions()->delete();
+
+            // Soft-delete the MO
+            $mo->delete();
         });
     }
 }

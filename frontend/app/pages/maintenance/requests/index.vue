@@ -29,7 +29,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="req in paginatedRequests" :key="req.id">
+          <tr v-for="req in paginatedRequests" :key="req.id" class="hover:bg-gray-50 cursor-pointer transition-colors" @click="openModal(req)">
             <td class="font-mono text-sm">#{{ req.id }}</td>
             <td class="font-medium">{{ req.name }}</td>
             <td>
@@ -42,7 +42,7 @@
             <td class="text-sm">{{ formatDate(req.scheduled_date) }}</td>
             <td><UiPriorityBadge :priority="req.priority" /></td>
             <td><UiStatusBadge :status="req.status" /></td>
-            <td>
+            <td @click.stop>
               <div class="flex items-center gap-2">
                 <UiIconButton
                   v-if="req.status !== 'done'"
