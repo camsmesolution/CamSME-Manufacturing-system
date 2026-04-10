@@ -593,9 +593,33 @@ const showFinishModal = ref(false)
 const finishingWo = ref<WorkOrder | null>(null)
 const finishForm = ref({ quantity: 0 })
 
-function openFinishModal(wo: WorkOrder) {
+async function openFinishModal(wo: WorkOrder) {
   finishingWo.value = wo
-  finishForm.value = { quantity: 0 }
+  // Default quantity to target if not already set
+  finishForm.value = { quantity: Number(wo.manufacturing_order?.qty_to_produce || 0) }
+  
+  if (wo.status === 'in_progress') {
+    processingId.value = wo.id
+    try {
+      await $api(`/work-orders/${wo.id}/pause`, { method: 'POST' })
+      toast.info('Timer paused for completion')
+      await refresh(true)
+      
+      // Update local reference to the now-paused WO
+      if (selectedMo.value) {
+        moWorkOrders.value = allWorkOrders.value
+          .filter(w => w.manufacturing_order_id === selectedMo.value!.id)
+          .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+        const current = moWorkOrders.value.find(w => w.id === wo.id)
+        if (current) finishingWo.value = current
+      }
+    } catch (e) {
+      console.error('Failed to pause WO', e)
+    } finally {
+      processingId.value = null
+    }
+  }
+  
   showFinishModal.value = true
 }
 

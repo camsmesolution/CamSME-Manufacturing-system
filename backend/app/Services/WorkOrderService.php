@@ -10,8 +10,13 @@ use Illuminate\Support\Facades\DB;
 class WorkOrderService
 {
     public function __construct(
-        protected OeeService $oeeService
+        protected OeeService $oeeService,
     ) {
+    }
+
+    protected function getMoService(): ManufacturingOrderService
+    {
+        return app(ManufacturingOrderService::class);
     }
 
     /**
@@ -118,6 +123,7 @@ class WorkOrderService
 
             if ($totalLaborCost > 0) {
                 CostEntry::create([
+                    'organization_id' => $workCenter->organization_id,
                     'manufacturing_order_id' => $workOrder->manufacturing_order_id,
                     'work_order_id' => $workOrder->id,
                     'cost_type' => 'labor',
@@ -135,6 +141,7 @@ class WorkOrderService
 
             if ($totalOverheadCost > 0) {
                 CostEntry::create([
+                    'organization_id' => $workCenter->organization_id,
                     'manufacturing_order_id' => $workOrder->manufacturing_order_id,
                     'work_order_id' => $workOrder->id,
                     'cost_type' => 'overhead',
@@ -162,9 +169,9 @@ class WorkOrderService
 
                 // Auto-complete if target quantity reached or exceeded
                 if ($qtyProduced >= $mo->qty_to_produce) {
-                    $mo->update([
-                        'status' => 'done',
-                        'actual_end' => now()
+                    $this->getMoService()->complete($mo, [
+                        'qty_produced' => $qtyProduced,
+                        // Note: location_id could be defaulted or omitted here
                     ]);
                 }
             }
