@@ -65,6 +65,8 @@
 </template>
 
 <script setup lang="ts">
+import { useIdleTimeout } from '~/composables/useIdleTimeout'
+
 // Protect route - redirect to login if not authenticated
 const { isAuthenticated, checkAuth, logout } = useAuth()
 

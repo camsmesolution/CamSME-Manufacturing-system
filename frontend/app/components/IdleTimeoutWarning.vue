@@ -27,20 +27,20 @@
                     </p>
 
                     <div class="flex gap-3">
-                        <Button
-                            variant="primary"
-                            class="flex-1"
+                        <button
+                            type="button"
+                            class="btn-primary flex-1 py-2 font-medium"
                             @click="$emit('continue')"
                         >
                             Stay Logged In
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            class="flex-1"
+                        </button>
+                        <button
+                            type="button"
+                            class="btn-ghost flex-1 py-2 font-medium bg-gray-100 hover:bg-gray-200 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 rounded"
                             @click="$emit('logout')"
                         >
                             Logout Now
-                        </Button>
+                        </button>
                     </div>
                 </div>
             </div>

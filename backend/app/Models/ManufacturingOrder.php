@@ -77,7 +77,20 @@ class ManufacturingOrder extends Model
     public static function generateName(): string
     {
         $year = date('Y');
-        $count = self::whereYear('created_at', $year)->count() + 1;
+        
+        $latest = self::withoutGlobalScope('organization')
+            ->withTrashed()
+            ->whereYear('created_at', $year)
+            ->where('name', 'like', "MO/{$year}/%")
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($latest && preg_match('/MO\/\d{4}\/(\d+)/', $latest->name, $matches)) {
+            $count = intval($matches[1]) + 1;
+        } else {
+            $count = 1;
+        }
+
         return sprintf('MO/%s/%05d', $year, $count);
     }
 }
