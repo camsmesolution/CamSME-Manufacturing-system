@@ -72,17 +72,58 @@ class StockAdjustmentController extends BaseController
      */
     public function update(StoreStockAdjustmentRequest $request, StockAdjustment $stockAdjustment)
     {
-        // Only allow updating reference and notes, not quantities or product/location
-        // This preserves the audit trail integrity
-        $stockAdjustment->update([
-            'reference' => $request->input('reference'),
-            'notes' => $request->input('notes'),
-        ]);
+        try {
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $stockAdjustment) {
+                // 1. Capture old state to revert it
+                $oldProductId = $stockAdjustment->product_id;
+                $oldLocationId = $stockAdjustment->location_id;
+                $oldLotId = $stockAdjustment->lot_id;
+                $oldQty = $stockAdjustment->quantity;
 
-        return $this->success(
-            $stockAdjustment->load(['product', 'location', 'lot', 'user']),
-            ['message' => 'Stock adjustment updated successfully']
-        );
+                // 2. Update the record with new data
+                $stockAdjustment->update($request->validated());
+
+                // 3. Revert Old Effect from Stock
+                $oldStock = \App\Models\Stock::where([
+                    'product_id' => $oldProductId,
+                    'location_id' => $oldLocationId,
+                    'lot_id' => $oldLotId,
+                ])->first();
+
+                if ($oldStock) {
+                    $oldStock->quantity -= $oldQty;
+                    $oldStock->save();
+                }
+
+                // 4. Apply New Effect to Stock
+                $newStock = \App\Models\Stock::firstOrNew([
+                    'product_id' => $stockAdjustment->product_id,
+                    'location_id' => $stockAdjustment->location_id,
+                    'lot_id' => $stockAdjustment->lot_id,
+                ]);
+
+                if (!$newStock->exists) {
+                    $newStock->organization_id = $stockAdjustment->organization_id;
+                }
+
+                $newStock->quantity += $stockAdjustment->quantity;
+
+                if ($newStock->quantity < 0) {
+                    throw new \InvalidArgumentException('Adjustment update would result in negative stock (' . $newStock->quantity . ')');
+                }
+
+                $newStock->save();
+
+                return $this->success(
+                    $stockAdjustment->load(['product', 'location', 'lot', 'user']),
+                    ['message' => 'Stock adjustment updated and inventory synchronized successfully']
+                );
+            });
+        } catch (\InvalidArgumentException $e) {
+            return $this->error($e->getMessage(), 422);
+        } catch (\Exception $e) {
+            return $this->error('Failed to update stock adjustment: ' . $e->getMessage(), 500);
+        }
     }
 
     /**

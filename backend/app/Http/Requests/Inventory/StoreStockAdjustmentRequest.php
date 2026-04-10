@@ -14,11 +14,11 @@ class StoreStockAdjustmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'product_id' => ['required', 'exists:products,id'],
-            'location_id' => ['required', 'exists:locations,id'],
+            'product_id' => ['sometimes', 'required', 'exists:products,id'],
+            'location_id' => ['sometimes', 'required', 'exists:locations,id'],
             'lot_id' => ['nullable', 'exists:lots,id'],
-            'quantity' => ['required', 'numeric', 'not_in:0'],
-            'reason' => ['required', 'in:physical_count,purchase,correction,loss,damage,initial'],
+            'quantity' => ['sometimes', 'required', 'numeric', 'not_in:0'],
+            'reason' => ['sometimes', 'required', 'in:physical_count,purchase,correction,loss,damage,initial,manufacturing_consumption,manufacturing_production,mo_cancelled,manufacturing_consumption_update,consumption_reversal'],
             'reference' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];
