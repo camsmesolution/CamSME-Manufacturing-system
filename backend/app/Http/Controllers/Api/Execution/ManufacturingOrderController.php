@@ -101,9 +101,9 @@ class ManufacturingOrderController extends BaseController
 
     public function update(UpdateManufacturingOrderRequest $request, ManufacturingOrder $manufacturingOrder)
     {
-        $manufacturingOrder->update($request->validated());
+        $mo = $this->service->update($manufacturingOrder, $request->validated());
 
-        return $this->success($manufacturingOrder);
+        return $this->success($mo);
     }
 
     public function destroy(ManufacturingOrder $manufacturingOrder)

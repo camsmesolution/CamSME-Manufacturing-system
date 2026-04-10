@@ -58,7 +58,7 @@ class ManufacturingOrderService
                 'work_center_id' => $operation->work_center_id,
                 'sequence' => $operation->sequence,
                 'status' => 'pending',
-                'duration_expected' => $operation->duration_minutes * $mo->qty_to_produce,
+                'duration_expected' => ($operation->duration_minutes * $mo->qty_to_produce) / $mo->bom->qty_produced,
             ]);
         }
 
@@ -104,6 +104,70 @@ class ManufacturingOrderService
             $mo->update(['status' => 'confirmed']);
 
             return $mo->load('workOrders');
+        });
+    }
+
+    /**
+     * Update a manufacturing order and sync related records if quantity changes
+     */
+    public function update(ManufacturingOrder $mo, array $data): ManufacturingOrder
+    {
+        return DB::transaction(function () use ($mo, $data) {
+            $oldQty = $mo->qty_to_produce;
+            $newQty = $data['qty_to_produce'] ?? $oldQty;
+
+            // Update the MO itself
+            $mo->update($data);
+
+            if (abs($newQty - $oldQty) > 0.0001) {
+                // 1. Update Consumptions
+                $mo->load(['consumptions.product', 'bom.lines']);
+                $bom = $mo->bom;
+
+                foreach ($mo->consumptions as $consumption) {
+                    // Find corresponding BOM line to get the ratio
+                    $line = $bom->lines->where('product_id', $consumption->product_id)->first();
+                    if ($line) {
+                        $oldPlanned = $consumption->qty_planned;
+                        $newPlanned = ($line->quantity * $newQty) / $bom->qty_produced;
+                        $delta = $newPlanned - $oldPlanned;
+
+                        $consumption->update(['qty_planned' => $newPlanned]);
+
+                        // 2. Adjust Reservations if already prepared/confirmed
+                        if (in_array($mo->status, ['confirmed', 'scheduled', 'in_progress']) && $consumption->location_id) {
+                            if ($delta > 0) {
+                                // Need MORE stock
+                                $this->stockService->reserve(
+                                    $consumption->product_id,
+                                    $consumption->location_id,
+                                    $delta,
+                                    $consumption->lot_id
+                                );
+                            } elseif ($delta < 0) {
+                                // Need LESS stock (release some)
+                                $this->stockService->release(
+                                    $consumption->product_id,
+                                    $consumption->location_id,
+                                    abs($delta),
+                                    $consumption->lot_id
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // 2. Update Work Orders
+                $mo->load(['workOrders.operation', 'bom']);
+                foreach ($mo->workOrders as $wo) {
+                    if ($wo->operation) {
+                        $newDuration = ($wo->operation->duration_minutes * $newQty) / $mo->bom->qty_produced;
+                        $wo->update(['duration_expected' => $newDuration]);
+                    }
+                }
+            }
+
+            return $mo->load(['consumptions.product', 'workOrders.operation']);
         });
     }
 
