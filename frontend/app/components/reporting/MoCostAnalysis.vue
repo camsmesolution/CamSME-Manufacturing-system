@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
     <!-- Cost Type Summary -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
       <div v-for="(amount, type) in displaySummary" :key="type" class="card p-4">
         <p class="text-xs text-gray-500 uppercase font-medium">{{ formatLabel(type) }}</p>
         <p :class="['text-xl font-bold mt-1', getTypeColor(type)]">
@@ -84,6 +84,7 @@ const displaySummary = computed(() => {
     // Ensure order
     return {
         material: rest.material || 0,
+        labor: rest.labor || 0,
         overhead: rest.overhead || 0,
         scrap: rest.scrap || 0,
         material_variance: rest.material_variance || 0
@@ -94,8 +95,7 @@ async function fetchAnalysis() {
   try {
     const res = await $api<any>(`/reporting/cost/${props.moId}`)
     summary.value = res.summary || {}
-    // Filter labor out of details
-    details.value = (res.details || []).filter((d: CostEntry) => d.cost_type !== 'labor')
+    details.value = res.details || []
   } catch (e) {
     console.error('Failed to fetch cost analysis', e)
   }
@@ -109,6 +109,7 @@ function formatLabel(key: string | number) {
 function getTypeColor(type: string | number) {
   const colors: Record<string, string> = {
     material: 'text-blue-600',
+    labor: 'text-green-600',
     overhead: 'text-yellow-600',
     scrap: 'text-red-600',
     material_variance: 'text-orange-600'

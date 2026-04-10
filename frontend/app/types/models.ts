@@ -150,6 +150,7 @@ export interface WorkOrder {
     qa_at?: string
     qa_user?: User
     assigned_user?: User
+    sequence?: number
 
 }
 

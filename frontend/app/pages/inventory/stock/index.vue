@@ -52,8 +52,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="stock in paginatedStock" :key="stock.id">
-            <td>
+          <tr v-for="stock in paginatedStock" :key="stock.id" class="hover:bg-gray-50 cursor-pointer transition-colors" @click="openDetail(stock)">
+            <td @click.stop>
                 <div 
                     class="w-10 h-10 rounded bg-gray-50 border border-gray-200 flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary-500 hover:ring-offset-1 transition-all"
                     @click="openImage(stock.product?.image_url, stock.product?.name)"
@@ -66,7 +66,7 @@
                 <Icon v-else name="heroicons:cube" class="w-5 h-5 text-gray-300" />
                 </div>
             </td>
-            <td class="font-medium text-primary-600 hover:text-primary-800 cursor-pointer" @click="openDetail(stock)">
+            <td class="font-medium text-primary-600">
                 {{ stock.product?.name || 'N/A' }}
             </td>
             <td>{{ stock.location?.name || 'N/A' }}</td>

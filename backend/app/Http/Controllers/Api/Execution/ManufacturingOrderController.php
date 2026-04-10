@@ -108,13 +108,12 @@ class ManufacturingOrderController extends BaseController
 
     public function destroy(ManufacturingOrder $manufacturingOrder)
     {
-        if ($manufacturingOrder->status !== 'draft') {
-            return $this->error('Only draft orders can be deleted', 422);
+        try {
+            $this->service->delete($manufacturingOrder);
+            return $this->success(null, [], 204);
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 422);
         }
-
-        $manufacturingOrder->delete();
-
-        return $this->success(null, [], 204);
     }
 
     public function confirm(ManufacturingOrder $manufacturingOrder)
