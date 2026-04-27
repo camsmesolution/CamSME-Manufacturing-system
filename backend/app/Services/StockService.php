@@ -20,6 +20,11 @@ class StockService
                 'lot_id' => $data['lot_id'] ?? null,
             ]);
 
+            // Set organization_id for new stock records
+            if (!$stock->exists) {
+                $stock->organization_id = $data['organization_id'] ?? auth()->user()->organization_id ?? 1;
+            }
+
             switch ($data['type']) {
                 case 'set':
                     // If setting lower, we might consider it consumption/loss? 
